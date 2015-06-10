@@ -1,25 +1,124 @@
 ---
 title: "Reproducible Research: Peer Assessment 1"
 output: 
-  html_document:
-    keep_md: true
+html_document:
+keep_md: true
 ---
 
 
 ## Loading and preprocessing the data
 
+Define global options for the whole document and required libraries are loaded.
+Data are read from the zipped file.
+```{r global_options}
+knitr::opts_chunk$set(echo=TRUE, warning=FALSE, output=TRUE)
+```
 
+```{r}
+library(data.table)
+library(ggplot2)
+library(chron)
+library(plyr)
+library(gridExtra)
+
+
+unzip('./activity.zip')
+file <- './activity.csv'
+
+data <- data.table(read.csv(file))
+data$date <- as.Date(data$date)
+```
 
 ## What is mean total number of steps taken per day?
 
+Histogram of number of steps per day
+```{r}
+daySteps <- data[,list(total=sum(steps)),by=date]
+plot1 <- qplot(daySteps$total,binwidth=10) + 
+        geom_histogram(binwidth=500) +
+        xlab("# steps per day") +
+        ylab("count")
+plot1
+```
 
+Mean and median number of steps per day:
+```{r}
+mean(daySteps$total)
+median(daySteps$total)
+```
 
 ## What is the average daily activity pattern?
 
+Time series for the average number of steps during the whole day, represented by the 5-min time interval
+```{r}
+dayActivity <- data[,list(total=mean(steps,na.rm=TRUE)),by=interval]
+qplot(interval, total, data=dayActivity, geom="line")+
+        xlab("5 min day interval") +
+        ylab("Average number of steps")
+```
+
+Maximum number of steps reached on average at 5-minute interval
+```{r}
+dayActivity$interval[dayActivity$total == max(dayActivity$total)]
+```
 
 
 ## Imputing missing values
 
+Detect the total number of missing values in the dataset
+```{r}
+idx <- is.na(data$steps)
+sum(idx)
+```
 
+Filling in all of the missing values in the dataset. The average value for the interval is employed.
+```{r}
+# Show some of the missing step values before filling in
+data[idx,]
+
+# Get corresponding interval index and fill in the missing values with the average number of steps
+data$steps[idx] <- dayActivity$total[match(data$interval[idx],dayActivity$interval)]
+
+# Show some of the missing step values after filling in
+data[idx,]
+```
+
+Histogram of number of steps per day after filling in NA's (comparison against previous one,left)
+```{r}
+daySteps2 <- data[,list(total=sum(steps)),by=date]
+plot2 <- qplot(daySteps2$total,binwidth=10) + 
+        geom_histogram(binwidth=500) +
+        xlab("# steps per day") +
+        ylab("count") +
+        ggtitle("Filled NA's")
+
+plot1 <- plot1 + ggtitle("NA's present")
+
+grid.arrange(plot1, plot2, ncol=2)
+```
+
+Mean and median number of steps per day after filling in NA's
+```{r}
+mean(daySteps2$total)
+median(daySteps2$total)
+```
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+In order to observe differences, the average activity pattern is computed segregated for weedays and weekends
+```{r}
+# Detect wether a day is week or weekend day
+data$dayType <- as.factor(is.weekend(data$date))
+levels(data$dayType)[levels(data$dayType)==TRUE]  <- "Weekend"
+levels(data$dayType)[levels(data$dayType)==FALSE] <- "Weekday"
+
+# Segment average activity by interval and day type
+dayActivity2 <- data[,list(total=mean(steps,na.rm=TRUE)),by=list(interval,dayType)]
+
+# Ploting
+qplot(interval, total, data=dayActivity2, geom="line") + facet_grid(dayType~.) +
+        xlab("5 min day interval") +
+        ylab("Average number of steps")
+```
+
+
